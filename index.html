@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة تحكم البيان التعليمية</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --text:#1c2733; --muted:#66727f; --line:#e1e6eb;
+          --primary:#1d4ed8; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#10161c; --card:#18212a; --text:#e8eef3; --muted:#93a1ae; --line:#2a3743;
+            --primary:#6ea0ff; --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; background:var(--bg); color:var(--text); }
+  [hidden] { display:none !important; }
+  button, input, select { font:inherit; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; }
+  .btn.ghost { background:transparent; color:var(--primary); border:1px solid var(--primary); }
+  .btn.ok { background:var(--ok); } .btn.bad { background:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  input, select { padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); width:100%; }
+  #login { max-width:360px; margin:12vh auto; background:var(--card); padding:24px; border-radius:14px; border:1px solid var(--line); }
+  #login h1 { margin:0 0 16px; font-size:20px; text-align:center; }
+  #login label { display:block; margin:10px 0 4px; color:var(--muted); font-size:14px; }
+  header { display:flex; align-items:center; gap:12px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  nav { display:flex; gap:6px; padding:10px 20px; overflow-x:auto; background:var(--card); border-bottom:1px solid var(--line); }
+  nav button { background:transparent; border:0; padding:8px 14px; border-radius:8px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  nav button.active { background:var(--primary); color:#fff; }
+  .badge { background:var(--bad); color:#fff; border-radius:10px; padding:0 7px; font-size:12px; margin-inline-start:6px; }
+  main { padding:20px; max-width:1200px; margin:0 auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .stat b { display:block; font-size:26px; margin-top:4px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:16px; overflow-x:auto; }
+  .panel h2 { font-size:16px; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:start; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; white-space:nowrap; }
+  td .btn { padding:5px 10px; font-size:13px; margin-inline-end:4px; }
+  .empty { color:var(--muted); padding:18px; text-align:center; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; background:var(--line); }
+  .tag.pending { color:var(--warn); } .tag.accepted,.tag.arrived { color:var(--primary); }
+  .tag.in_progress { color:var(--ok); } .tag.completed { color:var(--ok); } .tag.cancelled { color:var(--bad); }
+  #map { height:420px; border-radius:10px; margin-bottom:12px; z-index:0; }
+  #toast { position:fixed; bottom:20px; inset-inline:0; margin:auto; width:fit-content; max-width:90vw; background:#1c2733; color:#fff; padding:10px 18px; border-radius:10px; z-index:50; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:40; padding:16px; }
+  #modal .box { background:var(--card); border-radius:14px; padding:18px; max-width:760px; width:100%; max-height:90vh; overflow:auto; }
+  #modal img { max-width:100%; border-radius:8px; margin:8px 0; border:1px solid var(--line); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .row > div { flex:1; min-width:160px; }
+  .muted { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+
+<section id="login">
+  <h1>لوحة تحكم البيان التعليمية</h1>
+  <label for="email">البريد الإلكتروني</label>
+  <input id="email" type="email" dir="ltr" autocomplete="username">
+  <label for="password">كلمة المرور</label>
+  <input id="password" type="password" dir="ltr" autocomplete="current-password">
+  <p id="loginErr" style="color:var(--bad);min-height:20px;margin:10px 0 0"></p>
+  <button class="btn" id="loginBtn" style="width:100%;margin-top:6px">دخول</button>
+</section>
+
+<div id="app" hidden>
+  <header>
+    <h1>البيان التعليمية - الإدارة</h1>
+    <button class="btn ghost" id="refreshBtn">تحديث</button>
+    <button class="btn ghost" id="logoutBtn">خروج</button>
+  </header>
+  <nav id="nav"></nav>
+  <main>
+    <section data-tab="overview"></section>
+    <section data-tab="apps" hidden></section>
+    <section data-tab="teachers" hidden></section>
+    <section data-tab="withdrawals" hidden></section>
+    <section data-tab="live" hidden></section>
+    <section data-tab="suspended" hidden></section>
+    <section data-tab="notifications" hidden></section>
+    <section data-tab="settings" hidden></section>
+  </main>
+</div>
+
+<div id="modal" hidden><div class="box" id="modalBox"></div></div>
+<div id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const SUPABASE_URL = 'https://dtsznvtdmnslodjmhsjv.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Q-bt6JPsuCA8_fhGoVzZ2g_e86hndHy';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sdg = n => Number(n || 0).toLocaleString('en-US') + ' جنيه';
+const when = d => d ? new Date(d).toLocaleString('ar') : '-';
+const STATUS = { pending:'بانتظار مدرس', accepted:'في الطريق', arrived:'وصل', in_progress:'جارٍ', completed:'منتهٍ', cancelled:'ملغي' };
+const tag = s => `<span class="tag ${esc(s)}">${esc(STATUS[s] || s)}</span>`;
+
+const TABS = [
+  ['overview','نظرة عامة'], ['apps','طلبات المعلمين'], ['teachers','المعلمون'],
+  ['withdrawals','السحوبات'], ['live','الجلسات المباشرة'], ['suspended','الطلاب الموقوفون'],
+  ['notifications','الإشعارات'], ['settings','الإعدادات'],
+];
+let current = 'overview', dash = null, liveTimer = null, map = null, mapLayer = null, unread = 0;
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3500);
+}
+const errText = e => (e && (e.message || e.error_description)) || String(e);
+async function rpc(fn, args) {
+  const { data, error } = await sb.rpc(fn, args);
+  if (error) throw error;
+  return data;
+}
+async function act(btn, job, okMsg) {
+  if (btn) btn.disabled = true;
+  try { await job(); if (okMsg) toast(okMsg); }
+  catch (e) { toast(errText(e)); }
+  finally { if (btn) btn.disabled = false; }
+}
+function section(name) { return $(`section[data-tab="${name}"]`); }
+const table = (heads, rows) => rows.length
+  ? `<table><thead><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`
+  : '<div class="empty">لا توجد بيانات.</div>';
+
+/* ---------- Auth ---------- */
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await enter(); 
+}
+async function enter() {
+  try {
+    const isAdmin = await rpc('is_admin_user');
+    if (!isAdmin) {
+      await sb.auth.signOut();
+      $('#loginErr').textContent = 'هذا الحساب ليس حساب إدارة.';
+      return;
+    }
+  } catch (e) { $('#loginErr').textContent = errText(e); return; }
+  $('#login').hidden = true; $('#app').hidden = false;
+  buildNav(); await showTab('overview');
+  refreshBadge();
+}
+$('#loginBtn').onclick = async () => {
+  $('#loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email: $('#email').value.trim(), password: $('#password').value });
+  if (error) { $('#loginErr').textContent = error.message; return; }
+  await enter();
+};
+$('#password').addEventListener('keydown', e => { if (e.key === 'Enter') $('#loginBtn').click(); });
+$('#logoutBtn').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+$('#refreshBtn').onclick = () => showTab(current);
+
+/* ---------- Navigation ---------- */
+function buildNav() {
+  $('#nav').innerHTML = TABS.map(([k, label]) =>
+    `<button data-k="${k}">${label}${k === 'notifications' ? '<span class="badge" id="nbadge" hidden></span>' : ''}</button>`).join('');
+  $('#nav').onclick = e => { const b = e.target.closest('button[data-k]'); if (b) showTab(b.dataset.k); };
+}
+async function showTab(name) {
+  current = name;
+  clearInterval(liveTimer);
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.k === name));
+  document.querySelectorAll('main > section').forEach(s => s.hidden = s.dataset.tab !== name);
+  try { await ({ overview, apps, teachers, withdrawals, live, suspended, notifications, settings })[name](); }
+  catch (e) { section(name).innerHTML = `<div class="panel" style="color:var(--bad)">${esc(errText(e))}</div>`; }
+}
+async function refreshBadge() {
+  const { count } = await sb.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false);
+  unread = count || 0; const b = $('#nbadge');
+  if (b) { b.textContent = unread; b.hidden = !unread; }
+}
+
+/* ---------- Overview ---------- */
+async function loadDash() { dash = await rpc('get_admin_dashboard'); return dash; }
+async function overview() {
+  const d = await loadDash();
+  const stats = [['الطلاب', d.total_students], ['المعلمون', d.total_teachers], ['كل الطلبات', d.total_orders],
+    ['بانتظار مدرس', d.pending_orders], ['جارية الآن', d.in_progress_orders], ['مكتملة', d.completed_orders],
+    ['طلبات انضمام', d.teacher_applications.length]];
+  section('overview').innerHTML =
+    `<div class="grid">${stats.map(([l, v]) => `<div class="stat"><span>${l}</span><b>${esc(v)}</b></div>`).join('')}</div>
+     <div class="panel"><h2>آخر الطلبات</h2>${table(['#','الطالب','المادة','المستوى','الساعات','الحالة','المدرس','التاريخ'],
+       d.recent_orders.map(o => `<tr><td>${esc(o.id)}</td><td>${esc(o.student_name)}</td><td>${esc(o.subject)}</td><td>${esc(o.stage)}</td>
+         <td>${esc(o.duration_hours)}</td><td>${tag(o.status)}</td><td>${esc(o.teacher_name || '-')}</td><td>${when(o.created_at)}</td></tr>`))}</div>`;
+}
+
+/* ---------- Teacher applications ---------- */
+async function apps() {
+  const d = await loadDash();
+  const el = section('apps');
+  el.innerHTML = `<div class="panel"><h2>طلبات انضمام المعلمين (${d.teacher_applications.length})</h2>${table(
+    ['الاسم','البريد','الهاتف','الجنس','المواد','المستويات','التاريخ','إجراءات'],
+    d.teacher_applications.map(a => `<tr><td>${esc(a.full_name)}</td><td dir="ltr">${esc(a.email)}</td><td dir="ltr">${esc(a.phone)}</td>
+      <td>${esc(a.gender)}</td><td>${esc((a.subjects || []).join('، '))}</td><td>${esc((a.stages || []).join('، '))}</td><td>${when(a.applied_at)}</td>
+      <td><button class="btn ghost" data-docs="${esc(a.user_id)}">الوثائق</button>
+          <button class="btn ok" data-ok="${esc(a.user_id)}">قبول</button>
+          <button class="btn bad" data-no="${esc(a.user_id)}">رفض</button></td></tr>`))}</div>`;
+  el.onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.docs) return showDocs(b.dataset.docs);
+    const approve = !!b.dataset.ok, id = b.dataset.ok || b.dataset.no;
+    if (!id || !confirm(approve ? 'قبول هذا المعلم؟' : 'رفض هذا الطلب؟')) return;
+    await act(b, async () => { await rpc('review_teacher_application', { p_teacher_user_id: id, p_approved: approve }); await apps(); },
+      approve ? 'تم قبول المعلم.' : 'تم رفض الطلب.');
+  };
+}
+async function showDocs(userId) {
+  const rows = await rpc('admin_get_teacher_documents', { p_user_id: userId });
+  const doc = rows && rows[0];
+  const paths = [];
+  if (doc?.national_id_path) paths.push(['الهوية الوطنية', doc.national_id_path]);
+  (doc?.certificate_paths || []).forEach((p, i) => paths.push([`شهادة ${i + 1}`, p]));
+  let html = '<h2 style="margin-top:0">وثائق المعلم</h2>';
+  if (!paths.length) html += '<div class="empty">لم يرفع المعلم وثائق بعد.</div>';
+  for (const [label, p] of paths) {
+    const { data, error } = await sb.storage.from('teacher-docs').createSignedUrl(p, 300);
+    html += `<h3>${esc(label)}</h3>` + (error ? `<div style="color:var(--bad)">${esc(error.message)}</div>`
+      : `<a href="${esc(data.signedUrl)}" target="_blank" rel="noopener"><img src="${esc(data.signedUrl)}" alt="${esc(label)}"></a>`);
+  }
+  html += '<button class="btn ghost" id="closeModal">إغلاق</button>';
+  $('#modalBox').innerHTML = html; $('#modal').hidden = false;
+  $('#closeModal').onclick = () => $('#modal').hidden = true;
+}
+$('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').hidden = true; };
+
+/* ---------- Teachers & recharge ---------- */
+async function teachers() {
+  const d = await loadDash();
+  const el = section('teachers');
+  el.innerHTML = `<div class="panel"><h2>المعلمون المعتمدون (${d.approved_teachers.length})</h2>${table(
+    ['الاسم','البريد','الرصيد','شحن رصيد'],
+    d.approved_teachers.map(t => `<tr><td>${esc(t.name)}</td><td dir="ltr">${esc(t.email)}</td><td>${sdg(t.wallet_balance_sdg)}</td>
+      <td><button class="btn" data-id="${esc(t.user_id)}" data-name="${esc(t.name)}">شحن</button></td></tr>`))}</div>
+    <p class="muted">يُشحن الرصيد بعد استلام المبلغ من المعلم. تُخصم منه عمولة المنصة عند قبول كل طلب.</p>`;
+  el.onclick = async e => {
+    const b = e.target.closest('button[data-id]'); if (!b) return;
+    const amt = parseInt(prompt(`مبلغ الشحن للمعلم ${b.dataset.name} (جنيه):`), 10);
+    if (!amt || amt <= 0) return;
+    const note = prompt('ملاحظة (اختياري، مثل رقم الإشعار البنكي):') || '';
+    await act(b, async () => { await rpc('admin_recharge_teacher', { p_teacher_user_id: b.dataset.id, p_amount_sdg: amt, p_note: note }); await teachers(); },
+      'تم شحن الرصيد.');
+  };
+}
+
+/* ---------- Withdrawals ---------- */
+async function withdrawals() {
+  const rows = await rpc('admin_get_withdrawals');
+  const el = section('withdrawals');
+  const names = { pending:'قيد المراجعة', approved:'تمت الموافقة', rejected:'مرفوض' };
+  el.innerHTML = `<div class="panel"><h2>طلبات السحب</h2>${table(['المعلم','المبلغ','رصيده الحالي','الحالة','التاريخ','إجراءات'],
+    rows.map(w => `<tr><td>${esc(w.teacher_name || '-')}</td><td>${sdg(w.amount_sdg)}</td><td>${sdg(w.wallet_balance_sdg)}</td>
+      <td>${esc(names[w.status] || w.status)}</td><td>${when(w.created_at)}</td>
+      <td>${w.status === 'pending' ? `<button class="btn ok" data-ok="${w.id}">موافقة</button><button class="btn bad" data-no="${w.id}">رفض</button>` : ''}</td></tr>`))}</div>
+    <p class="muted">الموافقة تخصم المبلغ من رصيد المعلم. حوّل المبلغ له يدويًا بعد الموافقة.</p>`;
+  el.onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const approve = !!b.dataset.ok, id = Number(b.dataset.ok || b.dataset.no);
+    if (!id || !confirm(approve ? 'الموافقة على السحب وخصم الرصيد؟' : 'رفض طلب السحب؟')) return;
+    await act(b, async () => { await rpc('admin_review_withdrawal', { p_id: id, p_approve: approve }); await withdrawals(); },
+      approve ? 'تمت الموافقة وخُصم الرصيد.' : 'تم رفض الطلب.');
+  };
+}
+
+/* ---------- Live sessions map ---------- */
+async function live() {
+  const el = section('live');
+  el.innerHTML = `<div class="panel"><h2>الجلسات النشطة</h2><div id="map"></div><div id="liveTable"></div>
+    <p class="muted">أزرق: منزل الطالب. أخضر: موقع المدرس. يتحدث تلقائيًا كل 10 ثوانٍ.</p></div>`;
+  if (map) { map.remove(); map = null; }
+  map = L.map('map').setView([15.6, 32.5], 11);   // الخرطوم
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  mapLayer = L.layerGroup().addTo(map);
+  let fitted = false;
+  const load = async () => {
+    const rows = await rpc('admin_get_live_sessions');
+    mapLayer.clearLayers();
+    const pts = [];
+    rows.forEach(r => {
+      const dot = (c) => ({ radius: 8, color: c, fillColor: c, fillOpacity: .85 });
+      if (r.student_lat != null) {
+        const p = [r.student_lat, r.student_lng]; pts.push(p);
+        L.circleMarker(p, dot('#1d4ed8')).bindPopup(`طالب: ${esc(r.student_name)}<br>${esc(r.subject)}`).addTo(mapLayer);
+      }
+      if (r.teacher_lat != null) {
+        const p = [r.teacher_lat, r.teacher_lng]; pts.push(p);
+        L.circleMarker(p, dot('#15803d')).bindPopup(`مدرس: ${esc(r.teacher_name)}`).addTo(mapLayer);
+        if (r.student_lat != null) L.polyline([[r.student_lat, r.student_lng], p], { color: '#888', dashArray: '4' }).addTo(mapLayer);
+      }
+    });
+    if (pts.length && !fitted) { map.fitBounds(pts, { padding: [30, 30], maxZoom: 15 }); fitted = true; }
+    $('#liveTable').innerHTML = table(['#','الطالب','المادة','الساعات','الحالة','المدرس','بدأ في'],
+      rows.map(r => `<tr><td>${esc(r.order_id)}</td><td>${esc(r.student_name)}</td><td>${esc(r.subject)}</td><td>${esc(r.duration_hours)}</td>
+        <td>${tag(r.status)}</td><td>${esc(r.teacher_name || '-')}</td><td>${when(r.started_at)}</td></tr>`));
+  };
+  await load();
+  liveTimer = setInterval(() => load().catch(() => {}), 10000);
+}
+
+/* ---------- Suspended students ---------- */
+async function suspended() {
+  const rows = await rpc('admin_list_suspended_students');
+  const el = section('suspended');
+  el.innerHTML = `<div class="panel"><h2>الطلاب الموقوفون (تكرار الإلغاء)</h2>${table(['الطالب','المستوى','عدد الإلغاءات','إجراء'],
+    rows.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.stage || '-')}</td><td>${esc(s.cancel_count)}</td>
+      <td><button class="btn" data-id="${s.id}">رفع الإيقاف</button></td></tr>`))}</div>`;
+  el.onclick = async e => {
+    const b = e.target.closest('button[data-id]'); if (!b || !confirm('رفع الإيقاف وتصفير عدّاد الإلغاءات؟')) return;
+    await act(b, async () => { await rpc('admin_unsuspend_student', { p_student_id: Number(b.dataset.id) }); await suspended(); }, 'تم رفع الإيقاف.');
+  };
+}
+
+/* ---------- Notifications ---------- */
+const NOTE = {
+  student_suspended: p => `تم إيقاف طالب (رقم ${p.student_id}) بعد ${p.cancellations} إلغاءات.`,
+  withdrawal_requested: p => `طلب سحب جديد بمبلغ ${sdg(p.amount_sdg)}.`,
+  teacher_documents_uploaded: p => `رفع معلم ${p.kind === 'national_id' ? 'الهوية الوطنية' : 'شهادة علمية'}.`,
+};
+async function notifications() {
+  const { data, error } = await sb.from('admin_notifications').select('*').order('created_at', { ascending: false }).limit(60);
+  if (error) throw error;
+  const el = section('notifications');
+  el.innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px">
+    <h2 style="margin:0">الإشعارات</h2><button class="btn ghost" id="readAll">تعليم الكل كمقروء</button></div>${table(['','الإشعار','الوقت'],
+    data.map(n => `<tr style="${n.is_read ? 'opacity:.6' : ''}"><td>${n.is_read ? '' : '●'}</td>
+      <td>${esc((NOTE[n.kind] || (() => n.kind))(n.payload || {}))}</td><td>${when(n.created_at)}</td></tr>`))}</div>`;
+  $('#readAll').onclick = async e => act(e.target, async () => {
+    const { error: er } = await sb.from('admin_notifications').update({ is_read: true }).eq('is_read', false);
+    if (er) throw er; await notifications(); await refreshBadge();
+  });
+  refreshBadge();
+}
+
+/* ---------- Settings ---------- */
+async function settings() {
+  const { data: s, error } = await sb.from('app_settings').select('*').eq('id', 1).single();
+  if (error) throw error;
+  const el = section('settings');
+  el.innerHTML = `<div class="panel"><h2>الإعدادات</h2><div class="row">
+    <div><label class="muted">سعر الساعة (جنيه) - للعرض</label><input value="${esc(s.hourly_price_sdg)}" disabled></div>
+    <div><label class="muted">نسبة العمولة % - للعرض</label><input value="${esc(Number(s.commission_rate) * 100)}" disabled></div>
+    <div><label class="muted">حد إلغاءات الطالب قبل الإيقاف</label><input id="maxCancel" type="number" min="1" value="${esc(s.max_student_cancellations)}"></div>
+    <div><button class="btn" id="saveSettings">حفظ</button></div></div>
+    <p class="muted">السعر والعمولة للعرض فقط حاليًا: مبلغ العمولة المحجوزة عند قبول الطلب مضبوط داخل دوال القبول (2,100 جنيه للساعة). تغييرهما يتطلب تحديث تلك الدوال أولًا.</p></div>`;
+  $('#saveSettings').onclick = e => act(e.target, async () => {
+    const v = parseInt($('#maxCancel').value, 10);
+    if (!v || v < 1) throw new Error('قيمة غير صالحة.');
+    const { error: er } = await sb.from('app_settings').update({ max_student_cancellations: v }).eq('id', 1);
+    if (er) throw er;
+  }, 'تم الحفظ.');
+}
+
+boot();
+</script>
+</body>
+</html>
