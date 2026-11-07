@@ -131,6 +131,21 @@ const table = (heads, rows) => rows.length
   ? `<table><thead><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`
   : '<div class="empty">لا توجد بيانات.</div>';
 
+
+/* ---------- Search helpers ---------- */
+const norm = s => String(s ?? '').toLowerCase()
+  .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+  .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+  .trim();
+const haystackOf = o => norm(
+  Object.values(o).filter(v => typeof v === 'string' || typeof v === 'number').join(' ') + ' ' +
+  Object.values(o).filter(Array.isArray).flat().join(' '));
+const matches = (o, q) => !q || q.split(/\s+/).every(w => haystackOf(o).includes(w));
+const searchBox = (id, ph) =>
+  `<div class="row" style="margin-bottom:10px"><div><input id="${id}" type="search" autocomplete="off" placeholder="${ph}"></div>
+   <div class="muted" id="${id}Count" style="flex:0 0 auto"></div></div>`;
+
 /* ---------- Auth ---------- */
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
@@ -195,15 +210,25 @@ async function overview() {
 
 /* ---------- Teacher applications ---------- */
 async function apps() {
+  const prev = $('#aSearch')?.value || '';
   const d = await loadDash();
   const el = section('apps');
-  el.innerHTML = `<div class="panel"><h2>طلبات انضمام المعلمين (${d.teacher_applications.length})</h2>${table(
-    ['الاسم','البريد','الهاتف','الجنس','المواد','المستويات','التاريخ','إجراءات'],
-    d.teacher_applications.map(a => `<tr><td>${esc(a.full_name)}</td><td dir="ltr">${esc(a.email)}</td><td dir="ltr">${esc(a.phone)}</td>
-      <td>${esc(a.gender)}</td><td>${esc((a.subjects || []).join('، '))}</td><td>${esc((a.stages || []).join('، '))}</td><td>${when(a.applied_at)}</td>
-      <td><button class="btn ghost" data-docs="${esc(a.user_id)}">الوثائق</button>
-          <button class="btn ok" data-ok="${esc(a.user_id)}">قبول</button>
-          <button class="btn bad" data-no="${esc(a.user_id)}">رفض</button></td></tr>`))}</div>`;
+  const all = d.teacher_applications;
+  el.innerHTML = `<div class="panel"><h2>طلبات انضمام المعلمين</h2>${searchBox('aSearch', 'ابحث بالاسم أو البريد أو الهاتف أو المادة...')}<div id="aTable"></div></div>`;
+  $('#aSearch').value = prev;
+  const draw = () => {
+    const q = norm($('#aSearch').value);
+    const rows = all.filter(a => matches(a, q));
+    $('#aSearchCount').textContent = q ? `${rows.length} من ${all.length}` : `${all.length} طلب`;
+    $('#aTable').innerHTML = (q && !rows.length) ? '<div class="empty">لا توجد نتائج مطابقة للبحث.</div>' : table(
+      ['الاسم','البريد','الهاتف','الجنس','المواد','المستويات','التاريخ','إجراءات'],
+      rows.map(a => `<tr><td>${esc(a.full_name)}</td><td dir="ltr">${esc(a.email)}</td><td dir="ltr">${esc(a.phone)}</td>
+        <td>${esc(a.gender)}</td><td>${esc((a.subjects || []).join('، '))}</td><td>${esc((a.stages || []).join('، '))}</td><td>${when(a.applied_at)}</td>
+        <td><button class="btn ghost" data-docs="${esc(a.user_id)}">الوثائق</button>
+            <button class="btn ok" data-ok="${esc(a.user_id)}">قبول</button>
+            <button class="btn bad" data-no="${esc(a.user_id)}">رفض</button></td></tr>`));
+  };
+  $('#aSearch').oninput = draw; draw();
   el.onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.docs) return showDocs(b.dataset.docs);
@@ -234,13 +259,23 @@ $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').hidden = t
 
 /* ---------- Teachers & recharge ---------- */
 async function teachers() {
+  const prev = $('#tSearch')?.value || '';
   const d = await loadDash();
   const el = section('teachers');
-  el.innerHTML = `<div class="panel"><h2>المعلمون المعتمدون (${d.approved_teachers.length})</h2>${table(
-    ['الاسم','البريد','الرصيد','شحن رصيد'],
-    d.approved_teachers.map(t => `<tr><td>${esc(t.name)}</td><td dir="ltr">${esc(t.email)}</td><td>${sdg(t.wallet_balance_sdg)}</td>
-      <td><button class="btn" data-id="${esc(t.user_id)}" data-name="${esc(t.name)}">شحن</button></td></tr>`))}</div>
+  const all = d.approved_teachers;
+  el.innerHTML = `<div class="panel"><h2>المعلمون المعتمدون</h2>${searchBox('tSearch', 'ابحث بالاسم أو البريد أو الهاتف...')}<div id="tTable"></div></div>
     <p class="muted">يُشحن الرصيد بعد استلام المبلغ من المعلم. تُخصم منه عمولة المنصة عند قبول كل طلب.</p>`;
+  $('#tSearch').value = prev;
+  const draw = () => {
+    const q = norm($('#tSearch').value);
+    const rows = all.filter(t => matches(t, q));
+    $('#tSearchCount').textContent = q ? `${rows.length} من ${all.length}` : `${all.length} معلم`;
+    $('#tTable').innerHTML = (q && !rows.length) ? '<div class="empty">لا توجد نتائج مطابقة للبحث.</div>' : table(
+      ['الاسم','البريد','الرصيد','شحن رصيد'],
+      rows.map(t => `<tr><td>${esc(t.name)}</td><td dir="ltr">${esc(t.email)}</td><td>${sdg(t.wallet_balance_sdg)}</td>
+        <td><button class="btn" data-id="${esc(t.user_id)}" data-name="${esc(t.name)}">شحن</button></td></tr>`));
+  };
+  $('#tSearch').oninput = draw; draw();
   el.onclick = async e => {
     const b = e.target.closest('button[data-id]'); if (!b) return;
     const amt = parseInt(prompt(`مبلغ الشحن للمعلم ${b.dataset.name} (جنيه):`), 10);
